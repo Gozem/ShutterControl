@@ -135,7 +135,7 @@ class Shutter:
         print "%s %s" % (self._name, msg)
 
     def _runStateChangeCallback(self):
-        self._onStateChangeCallback(self._name, self._state, self._active)        
+        self._onStateChangeCallback(self, self._name, self._state, self._active)        
 
     def _setState(self, state):
         self._state = state
@@ -297,15 +297,28 @@ class ShutterServer(threading.Thread):
 
  
 if __name__ == "__main__":
+
+    _isOpen = set()
+    _isClosed = set()
     
     def wsSendAll(message):
         for client in wsClients:
             client.write_message(message)
 
-    def shutterStateChange(name, state, active):
+    def shutterStateChange(shutter, name, state, active):
         msg = name + "_" + State.toString(state) + "_" + str(active)
         print "Callback: " + msg
         wsSendAll(msg)
+
+        _isOpen.discard(shutter)
+        _isClosed.discard(shutter)
+        if state == State.OPEN or state == State.GOING_UP:
+            _isOpen.add(shutter)
+        elif state == State.CLOSED or state == State.GOING_DOWN:
+            _isClosed.add(shutter)
+
+        print _isOpen
+        print _isClosed
 
     tornado.options.parse_command_line()
 
@@ -322,20 +335,24 @@ if __name__ == "__main__":
 
     p1 = Pin("GPIO1", 1)
     p2 = Pin("GPIO2", 2)
-    s = Shutter("Shutter1", p1, p2, shutterStateChange)
+    s1 = Shutter("Shutter1", p1, p2, shutterStateChange)
+
+    p11 = Pin("GPIO11", 11)
+    p12 = Pin("GPIO12", 12)
+    s2 = Shutter("Shutter2", p11, p12, shutterStateChange)
 
 
     app = tornado.web.Application(
         handlers=[
             (r"/", IndexHandler),
             (r"/ws", WebSocketHandler)
-        ], shutter=s
+        ], shutter=s1
     )
     httpServer = tornado.httpserver.HTTPServer(app)
     httpServer.listen(options.port)
     print "Listening on port:", options.port
     main_loop = tornado.ioloop.IOLoop.instance()
-    sched_periodic = tornado.ioloop.PeriodicCallback(s.process, 1000, io_loop = main_loop)
+    sched_periodic = tornado.ioloop.PeriodicCallback(s1.process, 1000, io_loop = main_loop)
 
     sched_periodic.start()
     main_loop.start()
