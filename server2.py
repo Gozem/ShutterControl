@@ -19,7 +19,7 @@ class IndexHandler(tornado.web.RequestHandler):
 
 wsClients = set()
 def wsSendAll(msg):
-    print "SendAll:" + str(threading.current_thread())
+    #print "SendAll:" + str(threading.current_thread())
     for c in wsClients:
         c.write_message(msg)
 
@@ -262,6 +262,8 @@ class ShutterServer(threading.Thread):
     _isOpen = set()
     _isClosed = set()
 
+    _rain = False
+
     def sendCommand(self, cmd):
         # Called by other threads!
         self._cmdQ.put_nowait(cmd)
@@ -272,14 +274,14 @@ class ShutterServer(threading.Thread):
             self._observers.add(callback)
 
     def _announceStatus(self):
-        print "Announce:" + str(threading.current_thread())
+        #print "Announce:" + str(threading.current_thread())
         with self._observers_lock:
             for cb in self._observers:
                 cb(self._status.copy())
 
     def _shutterStateChange(self, shutter, name, state, busy):
         msg = name + "_" + State.toString(state) + "_" + str(busy)
-        print "Callback: " + msg
+        #print "Callback: " + msg
 
         updated = self._status.copy()
         updated[name] = {'state': State.toString(state),
@@ -333,8 +335,6 @@ class ShutterServer(threading.Thread):
                           'Shutter5': _shutter5,
                           'Shutter6': _shutter6,
                           }
-        
-        self._rain = False
 
     def _shutterControl(self, msg):
         try:
@@ -385,6 +385,27 @@ class ShutterServer(threading.Thread):
         else:
             print "Unknown command '%s' from client" % cmd
 
+    def _rainUpdate(self, msg):
+        print "Rain: " + str(msg)
+        try:
+            cmd = msg['cmd']
+
+        except Exception as e:
+            print "ERROR"
+            print e
+            return        
+
+        if cmd == 'RAINING':
+            self._rain = True
+            self._status['Rain'] = True
+            for s in self._shutters.values():
+                s.down()
+        elif cmd == 'NORAIN':
+            self._status['Rain'] = False
+            self._rain = False
+
+        self._announceStatus()
+
     def _process(self):
         # Call process() of each shutter once a second
         for (_, shutter) in self._shutters.iteritems():
@@ -426,12 +447,25 @@ if __name__ == "__main__":
         ioloop.add_callback(wsSendAll, tornado.escape.json_encode(status))
 
 
+    def raining(shutterServer):
+        time.sleep(10)
+        print "SENDING RAINING!"
+        msg = {'what': 'rain', 'cmd': 'RAINING'}
+        shutterServer.sendCommand(msg)
+    
+
     print "starting shutterserver"
+
+
 
     shutterServer = ShutterServer()
     shutterServer.setDaemon(True)
     shutterServer.subscribeStatus(ioloopCallback)
     shutterServer.start()
+
+    t = threading.Thread(target=raining, args=(shutterServer,))
+    t.setDaemon(True)
+    t.start()
 
     app = tornado.web.Application(
         handlers=[

@@ -6,9 +6,10 @@
 <body>
 <h1>Websocket</h1>
 <label id="conn_text"></label><br/>
-<label id="temp_1"></label><br/>
-<label id="temp_2"></label><br/>
-<label id="Shutter1"></label><br/>
+<label id="Rain">Unknown</label><br/>
+<label id="temp_1">Unknown</label><br/>
+<label id="temp_2">Unknown</label><br/>
+<label id="Shutter1">Unknown</label><br/>
 <label id="Shutter2"></label><br/>
 <label id="Shutter3"></label><br/>
 <label id="Shutter4"></label><br/>
@@ -64,6 +65,11 @@
 	    var label = document.getElementById(name);
             label.innerHTML = name + " " + msg[name].state + " " + msg[name].busy
           }
+          if (msg["Rain"]) {
+	    var label = document.getElementById("Rain");
+            label.innerHTML = msg["Rain"]
+	 }
+       
 	}
 
         var newMessage = document.createElement('p');
