@@ -285,17 +285,37 @@ class ShutterServer(threading.Thread):
         self.cmdQ = cmdQ       # Input command queue
         self.statusQ = statusQ # Output status queue
 
-        _p1 = Pin("GPIO1", 1)
-        _p2 = Pin("GPIO2", 2)
-        _shutter1 = Shutter("Shutter1", _p1, _p2, self.shutterStateChange)
-
         _p11 = Pin("GPIO11", 11)
         _p12 = Pin("GPIO12", 12)
-        _shutter2 = Shutter("Shutter2", _p11, _p12, self.shutterStateChange)
+        _shutter1 = Shutter("Shutter1", _p11, _p12, self.shutterStateChange)
+
+        _p21 = Pin("GPIO21", 21)
+        _p22 = Pin("GPIO22", 22)
+        _shutter2 = Shutter("Shutter2", _p21, _p22, self.shutterStateChange)
+
+        _p31 = Pin("GPIO31", 31)
+        _p32 = Pin("GPIO32", 32)
+        _shutter3 = Shutter("Shutter3", _p31, _p32, self.shutterStateChange)
+
+        _p41 = Pin("GPIO41", 41)
+        _p42 = Pin("GPIO42", 42)
+        _shutter4 = Shutter("Shutter4", _p41, _p42, self.shutterStateChange)
+
+        _p51 = Pin("GPIO51", 51)
+        _p52 = Pin("GPIO52", 52)
+        _shutter5 = Shutter("Shutter5", _p51, _p52, self.shutterStateChange)
+
+        _p61 = Pin("GPIO61", 61)
+        _p62 = Pin("GPIO62", 62)
+        _shutter6 = Shutter("Shutter6", _p61, _p62, self.shutterStateChange)
 
         self._shutters = {'shutter1': _shutter1,
-                     'shutter2': _shutter2,
-                     }
+                          'shutter2': _shutter2,
+                          'shutter3': _shutter3,
+                          'shutter4': _shutter4,
+                          'shutter5': _shutter5,
+                          'shutter6': _shutter6,
+                          }
         
         self._rain = False
 
