@@ -182,18 +182,22 @@ class Shutter:
 
     def down(self):
         self._log("Command down")
-        if getNow() <= self._cmdDoneAt:
+        if self._state == State.CLOSED or self._state == State.GOING_DOWN:
+            return
+        elif getNow() <= self._cmdDoneAt:
             self._stop() # Abort current
             self._setNextCmd(Command.DOWN)
-        elif self._state != State.CLOSED:
+        else:
             self._down()
 
     def up(self):
         self._log("Command up")
-        if getNow() <= self._cmdDoneAt:
+        if self._state == State.OPEN or self._state == State.GOING_UP:
+            return
+        elif getNow() <= self._cmdDoneAt:
             self._stop() # Abort current
             self._setNextCmd(Command.UP)
-        elif self._state != State.OPEN:
+        else:
             self._up()        
 
     def stop(self):

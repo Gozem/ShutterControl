@@ -18,25 +18,76 @@
 <br/>
 
 <div>
-  <button type="button" onclick="button('ANY', 'UP');"  >Any Up  </button><br/>
-  <button type="button" onclick="button('ANY', 'DOWN');">Any Down</button><br/>
+  <button onclick="button('ANY', 'UP');"  >Any Up  </button><br/>
+  <button onclick="button('ANY', 'DOWN');">Any Down</button><br/>
   <br/>
 </div>
 
 <div>
-  <button type="button" onclick="button('ALL', 'UP');"  >All Up  </button><br/>
-  <button type="button" onclick="button('ALL', 'DOWN');">All Down</button><br/>
+  <button onclick="button('ALL', 'UP');"  >All Up  </button><br/>
+  <button onclick="button('ALL', 'STOP');">All Stop</button><br/>
+  <button onclick="button('ALL', 'DOWN');">All Down</button><br/>
   <br/>
 </div>
 
 <div>
-  <button type="button" onclick="button('Shutter1', 'UP');"  >Up  </button><br/>
-  <button type="button" onclick="button('Shutter1', 'STOP');">Stop</button><br/>
-  <button type="button" onclick="button('Shutter1', 'DOWN');">Down</button><br/>
-  <br/>
-  <button type="button" onclick="button('Shutter1', 'FORCEUP');"  >ForceUp  </button><br/>
-  <button type="button" onclick="button('Shutter1', 'FORCEDOWN');">ForceDown</button><br/>
+  <table>
+    <tr>
+      <td>Shutter1</td>
+      <td>Shutter2</td>
+      <td>Shutter3</td>
+      <td>Shutter4</td>
+      <td>Shutter5</td>
+      <td>Shutter6</td>
+    </tr>
+    <tr>
+      <td><button onclick="button('Shutter1', 'UP');"  >Up  </button></td>
+      <td><button onclick="button('Shutter2', 'UP');"  >Up  </button></td>
+      <td><button onclick="button('Shutter3', 'UP');"  >Up  </button></td>
+      <td><button onclick="button('Shutter4', 'UP');"  >Up  </button></td>
+      <td><button onclick="button('Shutter5', 'UP');"  >Up  </button></td>
+      <td><button onclick="button('Shutter6', 'UP');"  >Up  </button></td>
+    </tr>
+    <tr>
+      <td><button onclick="button('Shutter1', 'STOP');">Stop</button></td>
+      <td><button onclick="button('Shutter2', 'STOP');">Stop</button></td>
+      <td><button onclick="button('Shutter3', 'STOP');">Stop</button></td>
+      <td><button onclick="button('Shutter4', 'STOP');">Stop</button></td>
+      <td><button onclick="button('Shutter5', 'STOP');">Stop</button></td>
+      <td><button onclick="button('Shutter6', 'STOP');">Stop</button></td>
+    </tr>
+    <tr>
+      <td><button onclick="button('Shutter1', 'DOWN');">Down</button></td>
+      <td><button onclick="button('Shutter2', 'DOWN');">Down</button></td>
+      <td><button onclick="button('Shutter3', 'DOWN');">Down</button></td>
+      <td><button onclick="button('Shutter4', 'DOWN');">Down</button></td>
+      <td><button onclick="button('Shutter5', 'DOWN');">Down</button></td>
+      <td><button onclick="button('Shutter6', 'DOWN');">Down</button></td>
+    </tr>
+    <tr></tr>
+    <tr>
+      <td><button onclick="button('Shutter1', 'FORCEUP');"  >ForceUp  </button></td>
+      <td><button onclick="button('Shutter2', 'FORCEUP');"  >ForceUp  </button></td>
+      <td><button onclick="button('Shutter3', 'FORCEUP');"  >ForceUp  </button></td>
+      <td><button onclick="button('Shutter4', 'FORCEUP');"  >ForceUp  </button></td>
+      <td><button onclick="button('Shutter5', 'FORCEUP');"  >ForceUp  </button></td>
+      <td><button onclick="button('Shutter6', 'FORCEUP');"  >ForceUp  </button></td>
+    </tr>
+    <tr>
+      <td><button onclick="button('Shutter1', 'FORCEDOWN');">ForceDown</button></td>
+      <td><button onclick="button('Shutter2', 'FORCEDOWN');">ForceDown</button></td>
+      <td><button onclick="button('Shutter3', 'FORCEDOWN');">ForceDown</button></td>
+      <td><button onclick="button('Shutter4', 'FORCEDOWN');">ForceDown</button></td>
+      <td><button onclick="button('Shutter5', 'FORCEDOWN');">ForceDown</button></td>
+      <td><button onclick="button('Shutter6', 'FORCEDOWN');">ForceDown</button></td>
+    </tr>
+  </table>
 </div>
+
+<div id="buttonTable" />
+
+<br/>
+
 <div id="messages_txt" />
 <script>
     var ws = null;
@@ -100,6 +151,31 @@
   function check() {
     if (!ws || ws.readyState == 3) start();
   }
+
+  function createButtonTable() {
+    var tbl  = document.createElement('table');
+    //tbl.style.width  = '100px';
+    //tbl.style.border = '0px solid black';
+
+			
+    var cmds = ["UP", "STOP", "DOWN", "FORCEUP", "FORCEDOWN"];
+    for(var i = 0; i < cmds.length; i++){
+        var tr = tbl.insertRow();
+        for (var j = 1; j <= 6; j++){
+	   var btn = document.createElement('button');
+           btn.onclick = function() { button("Shutter1", "UP"); };
+			   
+           btn.appendChild(document.createTextNode("apa"));
+           //btn.onclick = "button('Shutter" + j + "');";
+	   var td = tr.insertCell();
+           td.appendChild(btn);
+        }
+     }
+    
+   
+    document.getElementById('buttonTable').appendChild(tbl);
+  }
+  //createButtonTable();
 
     function button(shutter, cmd) {
       console.log("Button shutter: " + shutter + " cmd: " + cmd);
