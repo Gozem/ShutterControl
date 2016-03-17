@@ -250,13 +250,21 @@ class Shutter:
 
 
 class ShutterServer(threading.Thread):
+    _status = {}
     _isOpen = set()
     _isClosed = set()
 
-    def shutterStateChange(self, shutter, name, state, active):
-        msg = name + "_" + State.toString(state) + "_" + str(active)
+    def shutterStateChange(self, shutter, name, state, busy):
+        msg = name + "_" + State.toString(state) + "_" + str(busy)
         print "Callback: " + msg
-        wsSendAll(msg)
+
+        updated = self._status.copy()
+        updated[name] = {'state': State.toString(state),
+                         'busy': busy}
+
+        if updated != self._status:
+            wsSendAll(tornado.escape.json_encode(updated))
+            self._status = updated
 
         self._isOpen.discard(shutter)
         self._isClosed.discard(shutter)
@@ -265,8 +273,12 @@ class ShutterServer(threading.Thread):
         elif state == State.CLOSED or state == State.GOING_DOWN:
             self._isClosed.add(shutter)
 
-        #print _isOpen
-        #print _isClosed
+        #print self._isOpen
+        #print self._isClosed
+
+    
+
+
 
     def __init__(self, cmdQ, statusQ):
         threading.Thread.__init__(self)
@@ -287,7 +299,7 @@ class ShutterServer(threading.Thread):
         
         self._rain = False
 
-    def shutterControl(self, msg):
+    def _shutterControl(self, msg):
         try:
             shuttername = msg['shutter']
             cmd = msg['cmd']
@@ -311,33 +323,34 @@ class ShutterServer(threading.Thread):
             print "Unknown command '%s' from client" % cmd
 
     def _process(self):
+        # Call process() of each shutter once a second
         for (_, shutter) in self._shutters.iteritems():
             shutter.process()
 
-    def run(self):
-        print "ShutterServer running!"
-        while True:
-            
-            msg = None
+    def _handleMsg(self):
             try:
-                msg = self.cmdQ.get(True, 1) #Wait for a command for 1 sec
-                print "MSG: " + msg
+                msg = self.cmdQ.get(True, 1) # Wait for a command for 1 sec
+                print "MSG: " + repr(msg)
 
                 if msg['what'] == 'shutter':
-                    self.shutterControl(msg)
+                    self._shutterControl(msg)
                 elif msg['what'] == 'temp':
-                    self.tempUpdate(msg)
+                    self._tempUpdate(msg)
+                elif msg['what'] == 'rain':
+                    self._rainUpdate(msg)
                 else:
                     print "ERROR: Unknown msg['what']: %s" % msg['what']
 
-                self.cmdInQ.task_done()
+                self.cmdQ.task_done()
 
             except Queue.Empty:
                 pass
 
+    def run(self):
+        print "ShutterServer running!"
+        while True:
+            self._handleMsg()
             self._process()
-            
-
  
 if __name__ == "__main__":
 

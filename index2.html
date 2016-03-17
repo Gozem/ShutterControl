@@ -8,7 +8,12 @@
 <label id="conn_text"></label><br />
 <label id="temp_1"></label><br />
 <label id="temp_2"></label><br />
-<label id="shutterStatus"></label><br />
+<label id="Shutter1"></label><br />
+<label id="Shutter2"></label><br />
+<label id="Shutter3"></label><br />
+<label id="Shutter4"></label><br />
+<label id="Shutter5"></label><br />
+<label id="Shutter6"></label><br />
 
 <div>
   <button type="button" onclick="button('UP');"  >Up  </button><br/>
@@ -35,11 +40,21 @@
         conn_status.innerHTML = "Connection status: Connected!"
       }
 
-      ws.onmessage = function(evt) {
-        console.log("Status: " + evt.data)
+      ws.onmessage = function(event) {
+        console.log("Status: " + event.data)
+
+        var msg = JSON.parse(event.data)
+
+        for (i = 0; i < 6; i++) {
+	  var name = "Shutter" + i;
+	  if (msg[name]) {
+	    var label = document.getElementById(name);
+            label.innerHTML = name + " " + msg[name].state + " " + msg[name].busy
+          }
+	}
 
         var newMessage = document.createElement('p');
-        newMessage.textContent = "Server: " + evt.data;
+        newMessage.textContent = "Server: " + event.data;
         document.getElementById('messages_txt').appendChild(newMessage);
 
         //var label_temp1 = document.getElementById('temp_1');
@@ -48,8 +63,7 @@
         //label_temp1.innerHTML = "Temp1: " + current_temp[0];                        
         //label_temp2.innerHTML = "Temp2: " + current_temp[1];
 
-        var label_shutterStatus = document.getElementById('shutterStatus');
-        label_shutterStatus.innerHTML = "Status: " + evt.data
+
       };
 
       ws.onclose = function(event) {
