@@ -24,22 +24,23 @@ class WebSocketHandler(tornado.websocket.WebSocketHandler):
         if self not in wsClients:
             wsClients.append(self)
  
-    def on_message(self, message):
-        print 'message received %s' % message
+    def on_message(self, msg):
+        print 'message received %s' % msg
 
+        cmd = ""
+        try:
+            data = tornado.escape.json_decode(msg);
+            print data;
 
-        data = message.split(";")
-        cmd = data[0]
-        args = data[1:]
-        print cmd
-        print args
+            cmd = data['cmd'];
+
+        except:
+            print "can't decode %s" % msg
+
 
         s = self.application.settings.get('shutter')
 
         if cmd == "UP":
-            for arg in args:
-                print "arg: " + arg
-                
             s.up()
 
         elif cmd == "DOWN":

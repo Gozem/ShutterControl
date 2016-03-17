@@ -36,7 +36,7 @@
       }
 
       ws.onmessage = function(evt) {
-        console.log(evt.data)
+        console.log("Status: " + evt.data)
 
         var newMessage = document.createElement('p');
         newMessage.textContent = "Server: " + evt.data;
@@ -70,7 +70,12 @@
 
     function button(cmd) {
       console.log("Button cmd: " + cmd);
-      ws.send(cmd);
+    
+      var msg = {
+        shutter: "shutter1",
+        cmd: cmd
+      };
+      ws.send(JSON.stringify(msg));
     }
 
   start();
