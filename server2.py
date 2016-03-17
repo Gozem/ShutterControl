@@ -15,14 +15,26 @@ define("port", default=9000, help="run on the given port", type=int)
 class IndexHandler(tornado.web.RequestHandler):
     def get(self):
         self.render('index2.html')
- 
-wsClients = []
+
+
+wsClients = set()
+def wsSendAll(msg):
+    print "SendAll:" + str(threading.current_thread())
+    for c in wsClients:
+        c.write_message(msg)
+
 class WebSocketHandler(tornado.websocket.WebSocketHandler):
     def open(self):
-        print 'new connection'
+        print 'new connection '
+        print threading.current_thread()
+        
         self.write_message("connected")
-        if self not in wsClients:
-            wsClients.append(self)
+        wsClients.add(self)
+
+        data = {'what': "status"}
+
+        sendCmd = self.application.settings.get('sendCmd')
+        sendCmd(data)
  
     def on_message(self, msg):
         print 'message received %s' % msg
@@ -41,18 +53,13 @@ class WebSocketHandler(tornado.websocket.WebSocketHandler):
         print "Got command: %s->%s" % (shutter, cmd)
         data['what'] = "shutter"
 
-        cmdQ = self.application.settings.get('cmdQueue')
-        cmdQ.put_nowait(data)
+        sendCmd = self.application.settings.get('sendCmd')
+        sendCmd(data)
         
     def on_close(self):
         print 'connection closed'
-        if self in wsClients:
-            wsClients.remove(self)
+        wsClients.discard(self)
 
-
-def wsSendAll(message):
-    for client in wsClients:
-        client.write_message(message)
 
 
 
@@ -250,11 +257,33 @@ class Shutter:
 
 
 class ShutterServer(threading.Thread):
+    _cmdQ = Queue.Queue()
+
+    _observers = set()
+    _observers_lock = threading.Lock()
+
     _status = {}
+
     _isOpen = set()
     _isClosed = set()
 
-    def shutterStateChange(self, shutter, name, state, busy):
+
+    def sendCommand(self, cmd):
+        # Called by other threads!
+        self._cmdQ.put_nowait(cmd)
+
+    def subscribeStatus(self, callback):
+        # Called by other threads!
+        with self._observers_lock:
+            self._observers.add(callback)
+
+    def _announceStatus(self):
+        print "Announce:" + str(threading.current_thread())
+        with self._observers_lock:
+            for cb in self._observers:
+                cb(self._status.copy())
+
+    def _shutterStateChange(self, shutter, name, state, busy):
         msg = name + "_" + State.toString(state) + "_" + str(busy)
         print "Callback: " + msg
 
@@ -263,8 +292,8 @@ class ShutterServer(threading.Thread):
                          'busy': busy}
 
         if updated != self._status:
-            wsSendAll(tornado.escape.json_encode(updated))
-            self._status = updated
+            self._status = updated            
+            self._announceStatus()
 
         self._isOpen.discard(shutter)
         self._isClosed.discard(shutter)
@@ -276,38 +305,32 @@ class ShutterServer(threading.Thread):
         #print self._isOpen
         #print self._isClosed
 
-    
-
-
-
-    def __init__(self, cmdQ, statusQ):
+    def __init__(self):
         threading.Thread.__init__(self)
-        self.cmdQ = cmdQ       # Input command queue
-        self.statusQ = statusQ # Output status queue
 
         _p11 = Pin("GPIO11", 11)
         _p12 = Pin("GPIO12", 12)
-        _shutter1 = Shutter("Shutter1", _p11, _p12, self.shutterStateChange)
+        _shutter1 = Shutter("Shutter1", _p11, _p12, self._shutterStateChange)
 
         _p21 = Pin("GPIO21", 21)
         _p22 = Pin("GPIO22", 22)
-        _shutter2 = Shutter("Shutter2", _p21, _p22, self.shutterStateChange)
+        _shutter2 = Shutter("Shutter2", _p21, _p22, self._shutterStateChange)
 
         _p31 = Pin("GPIO31", 31)
         _p32 = Pin("GPIO32", 32)
-        _shutter3 = Shutter("Shutter3", _p31, _p32, self.shutterStateChange)
+        _shutter3 = Shutter("Shutter3", _p31, _p32, self._shutterStateChange)
 
         _p41 = Pin("GPIO41", 41)
         _p42 = Pin("GPIO42", 42)
-        _shutter4 = Shutter("Shutter4", _p41, _p42, self.shutterStateChange)
+        _shutter4 = Shutter("Shutter4", _p41, _p42, self._shutterStateChange)
 
         _p51 = Pin("GPIO51", 51)
         _p52 = Pin("GPIO52", 52)
-        _shutter5 = Shutter("Shutter5", _p51, _p52, self.shutterStateChange)
+        _shutter5 = Shutter("Shutter5", _p51, _p52, self._shutterStateChange)
 
         _p61 = Pin("GPIO61", 61)
         _p62 = Pin("GPIO62", 62)
-        _shutter6 = Shutter("Shutter6", _p61, _p62, self.shutterStateChange)
+        _shutter6 = Shutter("Shutter6", _p61, _p62, self._shutterStateChange)
 
         self._shutters = {'shutter1': _shutter1,
                           'shutter2': _shutter2,
@@ -349,7 +372,7 @@ class ShutterServer(threading.Thread):
 
     def _handleMsg(self):
             try:
-                msg = self.cmdQ.get(True, 1) # Wait for a command for 1 sec
+                msg = self._cmdQ.get(True, 1) # Wait for a command for 1 sec
                 print "MSG: " + repr(msg)
 
                 if msg['what'] == 'shutter':
@@ -358,10 +381,12 @@ class ShutterServer(threading.Thread):
                     self._tempUpdate(msg)
                 elif msg['what'] == 'rain':
                     self._rainUpdate(msg)
+                elif msg['what'] == 'status':
+                    self._announceStatus()
                 else:
                     print "ERROR: Unknown msg['what']: %s" % msg['what']
 
-                self.cmdQ.task_done()
+                self._cmdQ.task_done()
 
             except Queue.Empty:
                 pass
@@ -376,19 +401,23 @@ if __name__ == "__main__":
 
     tornado.options.parse_command_line()
 
+    def ioloopCallback(status):
+        ioloop = tornado.ioloop.IOLoop.instance()
+        ioloop.add_callback(wsSendAll, tornado.escape.json_encode(status))
+
 
     print "starting shutterserver"
-    cmdQ = Queue.Queue()
-    statusQ = Queue.Queue()
-    shutterServer = ShutterServer(cmdQ, statusQ)
+
+    shutterServer = ShutterServer()
     shutterServer.setDaemon(True)
+    shutterServer.subscribeStatus(ioloopCallback)
     shutterServer.start()
 
     app = tornado.web.Application(
         handlers=[
             (r"/", IndexHandler),
             (r"/ws", WebSocketHandler)
-        ], cmdQueue=cmdQ
+        ], sendCmd=shutterServer.sendCommand
     )
     httpServer = tornado.httpserver.HTTPServer(app)
     httpServer.listen(options.port)
@@ -397,6 +426,3 @@ if __name__ == "__main__":
     #sched_periodic = tornado.ioloop.PeriodicCallback(s1.process, 1000, io_loop = main_loop)
     #sched_periodic.start()
     main_loop.start()
-
-
-    
