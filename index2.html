@@ -2,87 +2,79 @@
 <html>
 <head>
 <title>Websocket</title>
-<script src="http://code.jquery.com/jquery-2.0.0.js"></script>
 </head>
 <body>
 <h1>Websocket</h1>
 <label id="conn_text"></label><br />
 <label id="temp_1"></label><br />
 <label id="temp_2"></label><br />
-
 <label id="shutterStatus"></label><br />
 
-<input type="text" id="input_text"/>
-<input type="submit" id="button" value="Send" /><br />
-<input type="submit" id="button2" value="Send" /><br />
-
-<input type="submit" id="buttonUp" value="Up" /><br />
-<input type="submit" id="buttonDown" value="Down" /><br />
-<input type="submit" id="buttonStop" value="Stop" /><br />
-<input type="submit" id="buttonForceUp" value="ForceUp" /><br />
-<input type="submit" id="buttonForceDown" value="ForceDown" /><br />
+<div>
+  <button type="button" onclick="button('UP');"  >Up  </button><br/>
+  <button type="button" onclick="button('STOP');">Stop</button><br/>
+  <button type="button" onclick="button('DOWN');">Down</button><br/>
+  <br/>
+  <button type="button" onclick="button('FORCEUP');"  >ForceUp  </button><br/>
+  <button type="button" onclick="button('FORCEDOWN');">ForceDown</button><br/>
+</div>
 <div id="messages_txt" />
 <script>
-  $(document).ready(function () {
-    //change example.com with your IP or your host
-    var ws = new WebSocket("ws://172.31.31.193:9000/ws");
-    ws.onopen = function(evt) {
-      var conn_status = document.getElementById('conn_text');
-      conn_status.innerHTML = "Connection status: Connected!"
-    };
-    ws.onmessage = function(evt) {
-      console.log(evt.data)
+    var ws = null;
+    var conn_status = document.getElementById('conn_text');
 
-      var newMessage = document.createElement('p');
-      newMessage.textContent = "Server: " + evt.data;
-      document.getElementById('messages_txt').appendChild(newMessage);
+    function start() {
+      var loc = window.location;
+      var uri = "ws://" + loc.host + "/ws";
+      console.log("Connecting...");
+      console.log(uri);
+      conn_status.innerHTML = "Connection status: Connecting..."
+      ws = new WebSocket(uri);
 
-      //var label_temp1 = document.getElementById('temp_1');
-      //var label_temp2 = document.getElementById('temp_2');
-      //current_temp = (evt.data).split(";");			
-      //label_temp1.innerHTML = "Temp1: " + current_temp[0];                        
-      //label_temp2.innerHTML = "Temp2: " + current_temp[1];
+      ws.onopen = function(evt) {
+        conn_status.innerHTML = "Connection status: Connected!"
+      }
 
-      var label_shutterStatus = document.getElementById('shutterStatus');
-      label_shutterStatus.innerHTML = "Status: " + evt.data
+      ws.onmessage = function(evt) {
+        console.log(evt.data)
 
-    };
-    ws.onclose = function(evt) {
-      var conn_status = document.getElementById('conn_text');
-      conn_status.innerHTML = "Connection status: Disconnected!"      
-    };
-    $("#button").click(function(evt) {
-      evt.preventDefault();
-      var message = $("#input_text").val();
-      ws.send(message);
-      var newMessage = document.createElement('p');
-      newMessage.textContent = "Client: " + message;
-      document.getElementById('messages_txt').appendChild(newMessage);
-    });
-    $("#button2").click(function(evt) {
-      evt.preventDefault();
-      ws.send("UP;1;2;5");
-    });
-    $("#buttonUp").click(function(evt) {
-      evt.preventDefault();
-      ws.send("UP");
-    });
-    $("#buttonDown").click(function(evt) {
-      evt.preventDefault();
-      ws.send("DOWN");
-    });
-    $("#buttonStop").click(function(evt) {
-      evt.preventDefault();
-      ws.send("STOP");
-    });
-    $("#buttonForceUp").click(function(evt) {
-      evt.preventDefault();
-      ws.send("FORCEUP");
-    });
-    $("#buttonForceDown").click(function(evt) {
-      evt.preventDefault();
-      ws.send("FORCEDOWN");
-    });
-  });
+        var newMessage = document.createElement('p');
+        newMessage.textContent = "Server: " + evt.data;
+        document.getElementById('messages_txt').appendChild(newMessage);
+
+        //var label_temp1 = document.getElementById('temp_1');
+        //var label_temp2 = document.getElementById('temp_2');
+        //current_temp = (evt.data).split(";");			
+        //label_temp1.innerHTML = "Temp1: " + current_temp[0];                        
+        //label_temp2.innerHTML = "Temp2: " + current_temp[1];
+
+        var label_shutterStatus = document.getElementById('shutterStatus');
+        label_shutterStatus.innerHTML = "Status: " + evt.data
+      };
+
+      ws.onclose = function(event) {
+        conn_status.innerHTML = "Connection status: Disconnected!"      
+        check(); //Reconnect now
+      };
+
+      ws.onerror = function(error) {
+        conn_status.innerHTML = "Connection status: Error: " + error;
+        console.log("ERROR: " + error);
+      }
+
+  }
+
+  function check() {
+    if (!ws || ws.readyState == 3) start();
+  }
+
+    function button(cmd) {
+      console.log("Button cmd: " + cmd);
+      ws.send(cmd);
+    }
+
+  start();
+  setInterval(check, 3000);
+
 </script>
 </body></html>
