@@ -7,7 +7,7 @@ import tornado.websocket
 import time
 import Queue
 import threading
-
+import random
  
 from tornado.options import define, options
 define("port", default=9000, help="run on the given port", type=int)
@@ -24,17 +24,16 @@ def wsSendAll(msg):
         c.write_message(msg)
 
 class WebSocketHandler(tornado.websocket.WebSocketHandler):
+    def _sendCommand(self, msg):
+        sendCmd = self.application.settings.get('sendCmd')
+        sendCmd(msg)
+
     def open(self):
-        print 'new connection '
-        print threading.current_thread()
-        
         self.write_message("connected")
         wsClients.add(self)
 
         data = {'what': "status"}
-
-        sendCmd = self.application.settings.get('sendCmd')
-        sendCmd(data)
+        self._sendCommand(data)
  
     def on_message(self, msg):
         print 'message received %s' % msg
@@ -49,18 +48,14 @@ class WebSocketHandler(tornado.websocket.WebSocketHandler):
             print "ERROR: Can't decode %s" % msg
             return
 
-
         print "Got command: %s->%s" % (shutter, cmd)
         data['what'] = "shutter"
+        self._sendCommand(data)
 
-        sendCmd = self.application.settings.get('sendCmd')
-        sendCmd(data)
         
     def on_close(self):
         print 'connection closed'
         wsClients.discard(self)
-
-
 
 
 def getNow():
@@ -267,7 +262,6 @@ class ShutterServer(threading.Thread):
     _isOpen = set()
     _isClosed = set()
 
-
     def sendCommand(self, cmd):
         # Called by other threads!
         self._cmdQ.put_nowait(cmd)
@@ -332,12 +326,12 @@ class ShutterServer(threading.Thread):
         _p62 = Pin("GPIO62", 62)
         _shutter6 = Shutter("Shutter6", _p61, _p62, self._shutterStateChange)
 
-        self._shutters = {'shutter1': _shutter1,
-                          'shutter2': _shutter2,
-                          'shutter3': _shutter3,
-                          'shutter4': _shutter4,
-                          'shutter5': _shutter5,
-                          'shutter6': _shutter6,
+        self._shutters = {'Shutter1': _shutter1,
+                          'Shutter2': _shutter2,
+                          'Shutter3': _shutter3,
+                          'Shutter4': _shutter4,
+                          'Shutter5': _shutter5,
+                          'Shutter6': _shutter6,
                           }
         
         self._rain = False
@@ -347,21 +341,47 @@ class ShutterServer(threading.Thread):
             shuttername = msg['shutter']
             cmd = msg['cmd']
 
-            shutter = self._shutters[shuttername]
-        except:
+            if shuttername == "ALL":
+                shutters = self._shutters.values()
+            elif shuttername == "ANY":
+                if cmd == "UP":
+                    if len(self._isClosed) > 0:
+                        shutters = random.sample(self._isClosed, 1)
+                    else:
+                        return
+                elif cmd == "DOWN":
+                    if len(self._isOpen) > 0:
+                        shutters = random.sample(self._isOpen, 1)
+                    else:
+                        return
+                else:
+                    return # Can't exec STOP, or FORCEUP/DOWN on ANY random shutter
+            else:
+                print "elsebr"
+                shutters = [self._shutters[shuttername]]
+
+        except Exception as e:
             print "ERROR"
+            print e
             return
 
+        print shutters
+
         if cmd == "UP":
-            shutter.up()
+            for s in shutters:
+                s.up()
         elif cmd == "DOWN":
-            shutter.down()
+            for s in shutters:
+                s.down()
         elif cmd == "STOP":
-            shutter.stop()
+            for s in shutters:
+                s.stop()
         elif cmd == "FORCEUP":
-            shutter.forceUp()
+            for s in shutters:
+                s.forceUp()
         elif cmd == "FORCEDOWN":
-            shutter.forceDown()
+            for s in shutters:
+                s.forceDown()
         else:
             print "Unknown command '%s' from client" % cmd
 

@@ -17,12 +17,24 @@
 <br/>
 
 <div>
-  <button type="button" onclick="button('UP');"  >Up  </button><br/>
-  <button type="button" onclick="button('STOP');">Stop</button><br/>
-  <button type="button" onclick="button('DOWN');">Down</button><br/>
+  <button type="button" onclick="button('ANY', 'UP');"  >Any Up  </button><br/>
+  <button type="button" onclick="button('ANY', 'DOWN');">Any Down</button><br/>
   <br/>
-  <button type="button" onclick="button('FORCEUP');"  >ForceUp  </button><br/>
-  <button type="button" onclick="button('FORCEDOWN');">ForceDown</button><br/>
+</div>
+
+<div>
+  <button type="button" onclick="button('ALL', 'UP');"  >All Up  </button><br/>
+  <button type="button" onclick="button('ALL', 'DOWN');">All Down</button><br/>
+  <br/>
+</div>
+
+<div>
+  <button type="button" onclick="button('Shutter1', 'UP');"  >Up  </button><br/>
+  <button type="button" onclick="button('Shutter1', 'STOP');">Stop</button><br/>
+  <button type="button" onclick="button('Shutter1', 'DOWN');">Down</button><br/>
+  <br/>
+  <button type="button" onclick="button('Shutter1', 'FORCEUP');"  >ForceUp  </button><br/>
+  <button type="button" onclick="button('Shutter1', 'FORCEDOWN');">ForceDown</button><br/>
 </div>
 <div id="messages_txt" />
 <script>
@@ -83,11 +95,11 @@
     if (!ws || ws.readyState == 3) start();
   }
 
-    function button(cmd) {
-      console.log("Button cmd: " + cmd);
+    function button(shutter, cmd) {
+      console.log("Button shutter: " + shutter + " cmd: " + cmd);
     
       var msg = {
-        shutter: "shutter1",
+        shutter: shutter,
         cmd: cmd
       };
       ws.send(JSON.stringify(msg));
