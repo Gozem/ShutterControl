@@ -30,38 +30,30 @@ class WebSocketHandler(tornado.websocket.WebSocketHandler):
         cmd = ""
         try:
             data = tornado.escape.json_decode(msg);
-            print data;
-
+            shutter = data['shutter'];
             cmd = data['cmd'];
 
         except:
-            print "can't decode %s" % msg
+            print "ERROR: Can't decode %s" % msg
+            return
 
 
-        s = self.application.settings.get('shutter')
+        print "Got command: %s->%s" % (shutter, cmd)
+        data['what'] = "shutter"
 
-        if cmd == "UP":
-            s.up()
-
-        elif cmd == "DOWN":
-            s.down()
-
-        elif cmd == "STOP":
-            s.stop()
-
-        elif cmd == "FORCEUP":
-            s.forceUp()
-
-        elif cmd == "FORCEDOWN":
-            s.forceDown()
-
-        else:
-            print "Unknown command '%s' from client" % cmd
+        cmdQ = self.application.settings.get('cmdQueue')
+        cmdQ.put_nowait(data)
         
     def on_close(self):
         print 'connection closed'
         if self in wsClients:
             wsClients.remove(self)
+
+
+def wsSendAll(message):
+    for client in wsClients:
+        client.write_message(message)
+
 
 
 def getNow():
@@ -225,7 +217,6 @@ class Shutter:
             return
 
         if getNow() < self._cmdDoneAt:
-            print "Still running"
             return # Still running a command
 
         # No command running, stop motor
@@ -259,67 +250,96 @@ class Shutter:
 
 
 class ShutterServer(threading.Thread):
-    _rain = False
-    _shutter = ['not used', # We have shutter 1-6, not 0-5
-                State.UNINITED, 
-                State.UNINITED, 
-                State.UNINITED,
-                State.UNINITED,
-                State.UNINITED,
-                State.UNINITED]
-
-    def __init__(self, cmdQ, statusQ):
-        threading.Thread.__init__(self)
-        self.cmdInQ = cmdQ       # Input command queue
-        self.statusOutQ = statusQ # Output status queue
-
-    def run(self):
-        print "ShutterServer running!"
-        while True:
-            msg = self.cmdInQ.get() # Blocks forever until command received
-            
-            print "MSG: " + msg
-            print self._shutter
-
-            data = msg.split(";")
-            cmd = data[0]
-            args = data[1:]
-            print cmd
-            print args
-
-            if cmd == "UP":
-                for arg in args:
-                    print "shutters: " + arg
-            else:
-                print "Unknown command '%s'" % cmd
-
-            self.cmdInQ.task_done()
-            
-
- 
-if __name__ == "__main__":
-
     _isOpen = set()
     _isClosed = set()
-    
-    def wsSendAll(message):
-        for client in wsClients:
-            client.write_message(message)
 
-    def shutterStateChange(shutter, name, state, active):
+    def shutterStateChange(self, shutter, name, state, active):
         msg = name + "_" + State.toString(state) + "_" + str(active)
         print "Callback: " + msg
         wsSendAll(msg)
 
-        _isOpen.discard(shutter)
-        _isClosed.discard(shutter)
+        self._isOpen.discard(shutter)
+        self._isClosed.discard(shutter)
         if state == State.OPEN or state == State.GOING_UP:
-            _isOpen.add(shutter)
+            self._isOpen.add(shutter)
         elif state == State.CLOSED or state == State.GOING_DOWN:
-            _isClosed.add(shutter)
+            self._isClosed.add(shutter)
 
-        print _isOpen
-        print _isClosed
+        #print _isOpen
+        #print _isClosed
+
+    def __init__(self, cmdQ, statusQ):
+        threading.Thread.__init__(self)
+        self.cmdQ = cmdQ       # Input command queue
+        self.statusQ = statusQ # Output status queue
+
+        _p1 = Pin("GPIO1", 1)
+        _p2 = Pin("GPIO2", 2)
+        _shutter1 = Shutter("Shutter1", _p1, _p2, self.shutterStateChange)
+
+        _p11 = Pin("GPIO11", 11)
+        _p12 = Pin("GPIO12", 12)
+        _shutter2 = Shutter("Shutter2", _p11, _p12, self.shutterStateChange)
+
+        self._shutters = {'shutter1': _shutter1,
+                     'shutter2': _shutter2,
+                     }
+        
+        self._rain = False
+
+    def shutterControl(self, msg):
+        try:
+            shuttername = msg['shutter']
+            cmd = msg['cmd']
+
+            shutter = self._shutters[shuttername]
+        except:
+            print "ERROR"
+            return
+
+        if cmd == "UP":
+            shutter.up()
+        elif cmd == "DOWN":
+            shutter.down()
+        elif cmd == "STOP":
+            shutter.stop()
+        elif cmd == "FORCEUP":
+            shutter.forceUp()
+        elif cmd == "FORCEDOWN":
+            shutter.forceDown()
+        else:
+            print "Unknown command '%s' from client" % cmd
+
+    def _process(self):
+        for (_, shutter) in self._shutters.iteritems():
+            shutter.process()
+
+    def run(self):
+        print "ShutterServer running!"
+        while True:
+            
+            msg = None
+            try:
+                msg = self.cmdQ.get(True, 1) #Wait for a command for 1 sec
+                print "MSG: " + msg
+
+                if msg['what'] == 'shutter':
+                    self.shutterControl(msg)
+                elif msg['what'] == 'temp':
+                    self.tempUpdate(msg)
+                else:
+                    print "ERROR: Unknown msg['what']: %s" % msg['what']
+
+                self.cmdInQ.task_done()
+
+            except Queue.Empty:
+                pass
+
+            self._process()
+            
+
+ 
+if __name__ == "__main__":
 
     tornado.options.parse_command_line()
 
@@ -330,32 +350,19 @@ if __name__ == "__main__":
     shutterServer = ShutterServer(cmdQ, statusQ)
     shutterServer.setDaemon(True)
     shutterServer.start()
-    #cmdQ.put_nowait("apa")
-    #cmdQ.put_nowait("UP;1;5")
-    #cmdQ.put_nowait("")
-
-    p1 = Pin("GPIO1", 1)
-    p2 = Pin("GPIO2", 2)
-    s1 = Shutter("Shutter1", p1, p2, shutterStateChange)
-
-    p11 = Pin("GPIO11", 11)
-    p12 = Pin("GPIO12", 12)
-    s2 = Shutter("Shutter2", p11, p12, shutterStateChange)
-
 
     app = tornado.web.Application(
         handlers=[
             (r"/", IndexHandler),
             (r"/ws", WebSocketHandler)
-        ], shutter=s1
+        ], cmdQueue=cmdQ
     )
     httpServer = tornado.httpserver.HTTPServer(app)
     httpServer.listen(options.port)
     print "Listening on port:", options.port
     main_loop = tornado.ioloop.IOLoop.instance()
-    sched_periodic = tornado.ioloop.PeriodicCallback(s1.process, 1000, io_loop = main_loop)
-
-    sched_periodic.start()
+    #sched_periodic = tornado.ioloop.PeriodicCallback(s1.process, 1000, io_loop = main_loop)
+    #sched_periodic.start()
     main_loop.start()
 
 
