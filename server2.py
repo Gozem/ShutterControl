@@ -29,7 +29,7 @@ class WebSocketHandler(tornado.websocket.WebSocketHandler):
         sendCmd(msg)
 
     def open(self):
-        self.write_message("connected")
+        #self.write_message("connected")
         wsClients.add(self)
 
         data = {'what': "status"}
@@ -122,15 +122,20 @@ class Command:
 
 class Shutter:
     _state = State.UNINITED
+    _heading = State.UNINITED # Is last command
     _nextCmd = Command.NOCMD
     _cmdDoneAt = getNow()
     _active = False
+    _lockedUntil = 0
+    _lockedPrio = 0
+    _wants = []
+    _autoReason = ""
 
     def _log(self, msg):
         print "%s %s" % (self._name, msg)
 
     def _runStateChangeCallback(self):
-        self._onStateChangeCallback(self, self._name, self._state, self._active)        
+        self._onStateChangeCallback(self, self._name, self._state, self._heading, self._active, self._lockedUntil)        
 
     def _setState(self, state):
         self._state = state
@@ -151,17 +156,39 @@ class Shutter:
         self._active = True
         self._runStateChangeCallback()
 
-    def _down(self):
+    def _runDown(self):
         self._log("Going down")
         self._downPin.on()
         self._setState(State.GOING_DOWN)
         self._running()
 
-    def _up(self):
+    def _runUp(self):
         self._log("Going up")
         self._upPin.on()
         self._setState(State.GOING_UP)
         self._running()
+
+    def _down(self):
+        self._log("Command down")
+        self._heading = State.CLOSED
+        if self._state == State.CLOSED or self._state == State.GOING_DOWN:
+            return
+        elif getNow() <= self._cmdDoneAt:
+            self._stop() # Abort current
+            self._setNextCmd(Command.DOWN)
+        else:
+            self._runDown()
+
+    def _up(self):
+        self._log("Command up")
+        self._heading = State.OPEN
+        if self._state == State.OPEN or self._state == State.GOING_UP:
+            return
+        elif getNow() <= self._cmdDoneAt:
+            self._stop() # Abort current
+            self._setNextCmd(Command.UP)
+        else:
+            self._runUp()        
 
     def _stop(self):
         self._downPin.off()
@@ -170,54 +197,72 @@ class Shutter:
         self._setNextCmd(Command.NOCMD)
         self._pause()
 
+
     def __init__(self, name, downPin, upPin, onStateChangeCallback):
         self._name = name
         self._downPin = downPin
         self._upPin = upPin
         self._onStateChangeCallback = onStateChangeCallback
 
-        #Init state, UP = off, run down
-        self._upPin.off()
-        self._down()
-
-    def down(self):
-        self._log("Command down")
-        if self._state == State.CLOSED or self._state == State.GOING_DOWN:
-            return
-        elif getNow() <= self._cmdDoneAt:
-            self._stop() # Abort current
-            self._setNextCmd(Command.DOWN)
-        else:
-            self._down()
-
-    def up(self):
-        self._log("Command up")
-        if self._state == State.OPEN or self._state == State.GOING_UP:
-            return
-        elif getNow() <= self._cmdDoneAt:
-            self._stop() # Abort current
-            self._setNextCmd(Command.UP)
-        else:
-            self._up()        
+        #Init state, stop, and then down
+        #SO if script restarts, we will have a small starting stop pause
+        self._stop()
+        self._setNextCmd(Command.DOWN)
 
     def stop(self):
         self._log("Command stop")
+        self._heading = State.STOPPED
         self._stop()
+
+    def lock(self, timestamp):
+        self._log("Lock timestamp=%d now=%d" % (timestamp,getNow()))
+        self._lockedUntil = timestamp
+        self._runStateChangeCallback()
+
+    def manualUp(self):
+        self._log("Manual Up")
+        self._up()
+
+    def manualDown(self):
+        self._log("Manual Down")
+        self._down()
+
+    def autoUp(self, prio, reason):
+        self._log("Auto Up prio=%d reason=%r" % (prio, reason))
+        if prio < self._lockedPrio or getNow() > self._lockedUntil:
+            self._autoReason = reason
+            self._up()
+
+    def autoDown(self, prio, reason):
+        self._log("Auto Down prio=%d reason=%r" % (prio, reason))
+        if prio < self._lockedPrio or getNow() > self._lockedUntil:
+            self._autoReason = reason
+            self._down()
 
     def forceDown(self):
         self._log("Command forceDown")
+        self._heading = State.CLOSED
         self._upPin.off()
-        self._down()
+        self._runDown()
         self._setNextCmd(Command.NOCMD)
 
     def forceUp(self):
         self._log("Command forceUp")
+        self._heading = State.OPEN
         self._downPin.off()
-        self._up()
+        self._runUp()
         self._setNextCmd(Command.NOCMD)
+
+    def getHeading(self):
+        return self._heading
 
     def process(self):
         # Called each second
+
+        if self._lockedUntil > 0 and getNow() >= self._lockedUntil:
+            self._log("Unlocking!")
+            self._lockedUntil = 0
+            self._runStateChangeCallback()
 
         if self._active == False:
             return
@@ -243,12 +288,12 @@ class Shutter:
             if self._nextCmd == Command.UP:
                 self._nextCmd = Command.NOCMD
                 if self._state != State.OPEN:
-                    self._up()
+                    self._runUp()
 
             elif self._nextCmd == Command.DOWN:
                 self._nextCmd = Command.NOCMD
                 if self._state != State.CLOSED:
-                    self._down()
+                    self._runDown()
             
             else:
                 # Nothing more todo, we are inactive and waiting for next cmd
@@ -263,10 +308,10 @@ class ShutterServer(threading.Thread):
 
     _status = {}
 
-    _isOpen = set()
-    _isClosed = set()
-
     _rain = False
+
+    _tempSensors = {}
+    _nextTempCheck = getNow()
 
     def sendCommand(self, cmd):
         # Called by other threads!
@@ -278,32 +323,24 @@ class ShutterServer(threading.Thread):
             self._observers.add(callback)
 
     def _announceStatus(self):
-        #print "Announce:" + str(threading.current_thread())
+        #print "Announce: " + str(self._status)
         with self._observers_lock:
             for cb in self._observers:
                 cb(self._status.copy())
 
-    def _shutterStateChange(self, shutter, name, state, busy):
-        msg = name + "_" + State.toString(state) + "_" + str(busy)
+    def _shutterStateChange(self, shutter, name, state, heading, busy, locked):
+        #msg = name + "_" + State.toString(state) + "_" + str(busy)
         #print "Callback: " + msg
 
         updated = self._status.copy()
         updated[name] = {'state': State.toString(state),
-                         'busy': busy}
+                         'heading': State.toString(heading),
+                         'busy': busy,
+                         'locked': locked}
 
         if updated != self._status:
             self._status = updated            
             self._announceStatus()
-
-        self._isOpen.discard(shutter)
-        self._isClosed.discard(shutter)
-        if state == State.OPEN or state == State.GOING_UP:
-            self._isOpen.add(shutter)
-        elif state == State.CLOSED or state == State.GOING_DOWN:
-            self._isClosed.add(shutter)
-
-        #print self._isOpen
-        #print self._isClosed
 
     def __init__(self):
         threading.Thread.__init__(self)
@@ -340,54 +377,96 @@ class ShutterServer(threading.Thread):
                           'Shutter6': _shutter6,
                           }
 
+    def _getOpenCloseable(self):
+        canOpen = []
+        canClose = []
+
+        for s in self._shutters.values():
+            heading = s.getHeading()
+
+            if heading != State.OPEN:
+                canOpen.append(s)
+
+            if heading != State.CLOSED:
+                canClose.append(s)
+                
+        return (canOpen, canClose)
+
+    @staticmethod
+    def _getRandom(selection):
+        if len(selection) > 0:
+            return random.choice(selection)
+        else:
+            return None
+        
+    def _getAnyUp(self):
+        (selection, _) = self._getOpenCloseable()
+        return self._getRandom(selection)
+      
+    def _getAnyDown(self):
+        (_, selection) = self._getOpenCloseable()
+        return self._getRandom(selection)
+
     def _shutterControl(self, msg):
         try:
             shuttername = msg['shutter']
             cmd = msg['cmd']
-
-            if shuttername == "ALL":
-                shutters = self._shutters.values()
-            elif shuttername == "ANY":
-                if cmd == "UP":
-                    if len(self._isClosed) > 0:
-                        shutters = random.sample(self._isClosed, 1)
-                    else:
-                        return
-                elif cmd == "DOWN":
-                    if len(self._isOpen) > 0:
-                        shutters = random.sample(self._isOpen, 1)
-                    else:
-                        return
-                else:
-                    return # Can't exec STOP, or FORCEUP/DOWN on ANY random shutter
-            else:
-                print "elsebr"
-                shutters = [self._shutters[shuttername]]
-
         except Exception as e:
             print "ERROR"
             print e
             return
 
-        print shutters
+        if shuttername == "ALL":
+            shutters = self._shutters.values()
+
+        elif shuttername == "ANY":
+            if cmd == "UP":
+                shutters = [self._getAnyUp()]
+            elif cmd == "DOWN":
+                shutters = [self._getAnyDown()]
+            else:    
+                print "ANY shutter can only be commanded UP or DOWN"
+                return
+
+        else:
+            try:
+                shutters = [self._shutters[shuttername]]
+            except Exception as e:
+                print "No such shutter name: " + shuttername 
+                print e
+                return
 
         if cmd == "UP":
-            for s in shutters:
-                s.up()
+            func = lambda x: x.manualUp()
+
         elif cmd == "DOWN":
-            for s in shutters:
-                s.down()
+            func = lambda x: x.manualDown()
+
         elif cmd == "STOP":
-            for s in shutters:
-                s.stop()
+            func = lambda x: x.stop()
+
         elif cmd == "FORCEUP":
-            for s in shutters:
-                s.forceUp()
+            func = lambda x: x.forceUp()
+
         elif cmd == "FORCEDOWN":
-            for s in shutters:
-                s.forceDown()
+            func = lambda x: x.forceDown()
+
+        elif cmd == "LOCK":
+            try:
+                value = msg['value']
+            except Exception as e:
+                print "ERROR"
+                print e
+                return
+            
+            func = lambda x: x.lock(value)
+
         else:
             print "Unknown command '%s' from client" % cmd
+            return
+
+        map(func, shutters)
+
 
     def _rainUpdate(self, msg):
         print "Rain: " + str(msg)
@@ -403,38 +482,106 @@ class ShutterServer(threading.Thread):
             self._rain = True
             self._status['Rain'] = True
             for s in self._shutters.values():
-                s.down()
+                s.autoDown(1, "Raining")
         elif cmd == 'NORAIN':
             self._status['Rain'] = False
             self._rain = False
 
         self._announceStatus()
 
+    def _tempUpdate(self, msg):
+        print "Temp: " + str(msg)
+        try:
+            tempname = msg['temp']
+            value = int(msg['value'])
+
+        except Exception as e:
+            print "ERROR"
+            print e
+            return        
+
+        self._tempSensors[tempname] = value
+
+        updated = self._status.copy()
+        updated[tempname] = value
+
+        if updated != self._status:
+            self._status = updated            
+            self._announceStatus()
+
+    def _getAvgTemp(self):
+        sum = 0
+        num = 0
+        for t in self._tempSensors.values():
+            sum += t
+            num += 1
+            
+        if num > 0:
+            return sum/num
+        else:
+            return 22
+
+    def _processTemp(self):
+        REFTEMP = 22
+        temp = self._getAvgTemp()
+
+        if temp >= REFTEMP + 10:
+            for s in self._shutters.values():
+                s.autoUp(5, "Very warm")
+            return
+        elif temp <= REFTEMP - 10:
+            for s in self._shutters.values():
+                s.autoDown(5, "Very cold")
+            return
+
+        if getNow() < self._nextTempCheck:
+            return
+
+        if temp >= REFTEMP + 1:
+            shutter = self._getAnyUp()
+            if shutter:
+                shutter.autoUp(10, "Warm")
+            else:
+                print "High temp: Nothing more to open"
+            
+        elif temp <= REFTEMP - 1:
+            shutter = self._getAnyDown()
+            if shutter:
+                shutter.autoDown(10, "Cold")
+            else:
+                print "Low temp: Nothing more to close"
+
+        self._nextTempCheck = getNow() + 3
+        
+
     def _process(self):
+        if self._rain == False:
+            self._processTemp()
+
         # Call process() of each shutter once a second
-        for (_, shutter) in self._shutters.iteritems():
+        for shutter in self._shutters.values():
             shutter.process()
 
     def _handleMsg(self):
-            try:
-                msg = self._cmdQ.get(True, 1) # Wait for a command for 1 sec
-                print "MSG: " + repr(msg)
+        try:
+            msg = self._cmdQ.get(True, 1) # Wait for a command for 1 sec
+            print "MSG: " + repr(msg)
 
-                if msg['what'] == 'shutter':
-                    self._shutterControl(msg)
-                elif msg['what'] == 'temp':
-                    self._tempUpdate(msg)
-                elif msg['what'] == 'rain':
-                    self._rainUpdate(msg)
-                elif msg['what'] == 'status':
-                    self._announceStatus()
-                else:
-                    print "ERROR: Unknown msg['what']: %s" % msg['what']
+            if msg['what'] == 'shutter':
+                self._shutterControl(msg)
+            elif msg['what'] == 'temp':
+                self._tempUpdate(msg)
+            elif msg['what'] == 'rain':
+                self._rainUpdate(msg)
+            elif msg['what'] == 'status':
+                self._announceStatus()
+            else:
+                print "ERROR: Unknown msg['what']: %s" % msg['what']
 
-                self._cmdQ.task_done()
+            self._cmdQ.task_done()
 
-            except Queue.Empty:
-                pass
+        except Queue.Empty:
+            pass
 
     def run(self):
         print "ShutterServer running!"
@@ -452,11 +599,33 @@ if __name__ == "__main__":
 
 
     def raining(shutterServer):
-        time.sleep(10)
-        print "SENDING RAINING!"
-        msg = {'what': 'rain', 'cmd': 'RAINING'}
-        shutterServer.sendCommand(msg)
-    
+        wait = 5
+
+        while True:
+            time.sleep(wait)
+            print "SENDING RAINING!"
+            msg = {'what': 'rain', 'cmd': 'RAINING'}
+            shutterServer.sendCommand(msg)
+            
+            time.sleep(wait)
+            print "SENDING temp!"
+            msg = {'what': 'temp', 'temp': 'TempSensor1', 'value': 25}
+            shutterServer.sendCommand(msg)
+            
+            time.sleep(wait)
+            print "SENDING NORAIN!"
+            msg = {'what': 'rain', 'cmd': 'NORAIN'}
+            shutterServer.sendCommand(msg)
+            
+            time.sleep(wait)
+            print "SENDING temp!"
+            msg = {'what': 'temp', 'temp': 'TempSensor1', 'value': 20}
+            shutterServer.sendCommand(msg)
+            
+            time.sleep(wait)
+            print "SENDING temp!"
+            msg = {'what': 'temp', 'temp': 'TempSensor1', 'value': 24}
+            shutterServer.sendCommand(msg)
 
     print "starting shutterserver"
 
