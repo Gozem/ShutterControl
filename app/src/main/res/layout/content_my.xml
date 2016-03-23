@@ -1,0 +1,299 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:orientation="vertical"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:paddingLeft="@dimen/activity_horizontal_margin"
+    android:paddingRight="@dimen/activity_horizontal_margin"
+    android:paddingTop="@dimen/activity_vertical_margin"
+    android:paddingBottom="@dimen/activity_vertical_margin"
+    tools:context=".MainActivity$PlaceholderFragment"
+    >
+
+    <LinearLayout
+        android:layout_height="wrap_content"
+        android:layout_width="match_parent"
+        android:orientation="horizontal">
+
+
+        <EditText
+            android:id="@+id/location"
+            android:layout_height="wrap_content"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:hint="Server:Port"
+            android:inputType="textShortMessage"/>
+
+        <Button
+            android:layout_height="wrap_content"
+            android:layout_width="wrap_content"
+            android:layout_gravity="bottom"
+            android:text="Connect"
+            android:onClick="buttonConnect"/>
+
+    </LinearLayout>
+
+    <GridLayout
+        android:layout_height="wrap_content"
+        android:layout_width="wrap_content"
+
+        android:useDefaultMargins="true"
+        android:alignmentMode="alignBounds"
+        android:columnOrderPreserved="false"
+        android:columnCount="2"
+        >
+
+        <TextView
+            android:text="Connected:"
+            />
+        <TextView
+            android:id="@+id/status"
+            android:text="Unknown"
+            />
+
+        <TextView
+            android:text="Rain:"
+            />
+        <TextView
+            android:id="@+id/rain"
+            android:text="Unknown"
+            />
+
+        <TextView
+            android:text="Temp1:"
+            />
+        <TextView
+            android:id="@+id/temp1"
+            android:text="Unknown"
+            />
+
+        <TextView
+            android:text="Temp2:"
+            />
+        <TextView
+            android:id="@+id/temp2"
+            android:text="Unknown"
+            />
+    </GridLayout>
+
+    <GridLayout
+        android:layout_height="wrap_content"
+        android:layout_width="wrap_content"
+
+        android:useDefaultMargins="true"
+        android:alignmentMode="alignBounds"
+        android:columnOrderPreserved="false"
+        android:columnCount="5"
+        >
+
+        <Space
+            />
+        <TextView
+            android:text="State:"
+            android:layout_width="60dip"
+            />
+        <TextView
+            android:text="Busy:"
+            />
+        <TextView
+            android:text="Reason:"
+            />
+        <TextView
+            android:text="Locked:"
+            />
+
+        <TextView
+            android:text="Shutter1:"
+            />
+        <TextView
+            android:id="@+id/shutter1_state"
+            android:text="Unknown"
+            />
+        <TextView
+            android:id="@+id/shutter1_busy"
+            android:text="Busy..."
+            android:textColor="#ff0000"
+            android:visibility="invisible"
+            />
+        <TextView
+            android:id="@+id/shutter1_reason"
+            />
+        <TextView
+            android:id="@+id/shutter1_locked"
+            />
+
+
+        <TextView
+            android:text="Shutter2:"
+            />
+        <TextView
+            android:id="@+id/shutter2_state"
+            android:text="Unknown"
+            />
+        <TextView
+            android:id="@+id/shutter2_busy"
+            android:text="Busy..."
+            android:textColor="#ff0000"
+            android:visibility="invisible"
+            />
+        <TextView
+            android:id="@+id/shutter2_reason"
+            />
+        <TextView
+            android:id="@+id/shutter2_locked"
+            />
+
+        <TextView
+            android:text="Shutter3:"
+            />
+        <TextView
+            android:id="@+id/shutter3_state"
+            android:text="Unknown"
+            />
+        <TextView
+            android:id="@+id/shutter3_busy"
+            android:text="Busy..."
+            android:textColor="#ff0000"
+            android:visibility="invisible"
+            />
+        <TextView
+            android:id="@+id/shutter3_reason"
+            />
+        <TextView
+            android:id="@+id/shutter3_locked"
+            />
+
+        <TextView
+            android:text="Shutter4:"
+            />
+        <TextView
+            android:id="@+id/shutter4_state"
+            android:text="Unknown"
+            />
+        <TextView
+            android:id="@+id/shutter4_busy"
+            android:text="Busy..."
+            android:textColor="#ff0000"
+            android:visibility="invisible"
+            />
+        <TextView
+            android:id="@+id/shutter4_reason"
+            />
+        <TextView
+            android:id="@+id/shutter4_locked"
+            />
+
+        <TextView
+            android:text="Shutter5:"
+            />
+        <TextView
+            android:id="@+id/shutter5_state"
+            android:text="Unknown"
+            />
+        <TextView
+            android:id="@+id/shutter5_busy"
+            android:text="Busy..."
+            android:textColor="#ff0000"
+            android:visibility="invisible"
+            />
+        <TextView
+            android:id="@+id/shutter5_reason"
+            />
+        <TextView
+            android:id="@+id/shutter5_locked"
+            />
+
+
+        <TextView
+            android:text="Shutter6:"
+            />
+        <TextView
+            android:id="@+id/shutter6_state"
+            android:text="Unknown"
+            />
+        <TextView
+            android:id="@+id/shutter6_busy"
+            android:text="Busy..."
+            android:textColor="#ff0000"
+            android:visibility="invisible"
+            />
+        <TextView
+            android:id="@+id/shutter6_reason"
+            />
+        <TextView
+            android:id="@+id/shutter6_locked"
+            />
+    </GridLayout>
+
+    <GridLayout
+            android:layout_height="wrap_content"
+            android:layout_width="wrap_content"
+            android:rowCount="3"
+            android:orientation="vertical">
+            >
+
+            <Button
+                android:layout_gravity="fill_horizontal"
+                android:text="Any Open"
+                android:onClick="sendAnyUp"
+                />
+            <Button
+                android:layout_gravity="fill_horizontal"
+                android:text="Any Close"
+                android:onClick="sendAnyDown"
+                />
+            <Space
+                />
+
+            <Button
+                android:layout_gravity="fill_horizontal"
+                android:text="Stop"
+                android:textColor="#ff0000"
+                android:onClick="sendAllStop"
+                />
+            <LinearLayout
+                android:id="@+id/LinearLayout02"
+                android:layout_height="wrap_content"
+                android:layout_width="match_parent"
+                android:layout_gravity="fill_horizontal"
+                android:layout_alignParentBottom="true">
+
+                <Button
+                    style="?android:attr/buttonStyleSmall"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="-"
+                    android:onClick="sendLockMinus15"
+                    />
+                <Button
+                    style="?android:attr/buttonStyleSmall"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="+"
+                    android:onClick="sendLockPlus15"
+                    />
+            </LinearLayout>
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:text="Lock 15min"
+                />
+
+            <Button
+                android:layout_gravity="fill_horizontal"
+                android:text="All Open"
+                android:onClick="sendAllUp"
+                />
+            <Button
+                android:layout_gravity="fill_horizontal"
+                android:text="All Close"
+                android:onClick="sendAllDown"
+                />
+            <Space
+                />
+
+    </GridLayout>
+
+</LinearLayout>
