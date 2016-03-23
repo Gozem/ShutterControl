@@ -299,7 +299,6 @@ class Shutter:
                 # Nothing more todo, we are inactive and waiting for next cmd
                 self._runStateChangeCallback()
 
-
 class ShutterServer(threading.Thread):
     _cmdQ = Queue.Queue()
 
