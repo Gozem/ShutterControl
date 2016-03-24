@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:grid="http://schemas.android.com/apk/res-auto"
     android:orientation="vertical"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
@@ -8,8 +9,7 @@
     android:paddingRight="@dimen/activity_horizontal_margin"
     android:paddingTop="@dimen/activity_vertical_margin"
     android:paddingBottom="@dimen/activity_vertical_margin"
-    tools:context=".MainActivity$PlaceholderFragment"
-    >
+    tools:context=".MainActivity$PlaceholderFragment">
 
     <LinearLayout
         android:layout_height="wrap_content"
@@ -228,70 +228,91 @@
 
     <GridLayout
             android:layout_height="wrap_content"
-            android:layout_width="wrap_content"
+            android:layout_width="fill_parent"
             android:rowCount="3"
-            android:orientation="vertical">
+            android:columnCount="3"
+            android:orientation="vertical"
+
+        android:layout_centerHorizontal="true"
+
+
+        android:rowOrderPreserved="false"
+
             >
 
             <Button
+                android:layout_columnWeight="1"
                 android:layout_gravity="fill_horizontal"
-                android:text="Any Open"
+
+                android:text="Open one"
                 android:onClick="sendAnyUp"
                 />
             <Button
                 android:layout_gravity="fill_horizontal"
-                android:text="Any Close"
+                android:layout_columnWeight="1"
+
+                android:text="Close one"
                 android:onClick="sendAnyDown"
                 />
             <Space
+                android:layout_columnWeight="1"
                 />
 
             <Button
+                android:layout_columnWeight="1"
                 android:layout_gravity="fill_horizontal"
                 android:text="Stop"
                 android:textColor="#ff0000"
                 android:onClick="sendAllStop"
                 />
+
             <LinearLayout
                 android:id="@+id/LinearLayout02"
-                android:layout_height="wrap_content"
-                android:layout_width="match_parent"
+                android:layout_height="fill_parent"
+                android:layout_width="0dp"
                 android:layout_gravity="fill_horizontal"
-                android:layout_alignParentBottom="true">
+                android:layout_columnWeight="1"
+                >
 
                 <Button
                     style="?android:attr/buttonStyleSmall"
-                    android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
+                    android:layout_width="wrap_content"
+                    android:layout_weight="1"
                     android:text="-"
                     android:onClick="sendLockMinus15"
-                    />
+                     />
                 <Button
                     style="?android:attr/buttonStyleSmall"
-                    android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
+                    android:layout_width="wrap_content"
+                    android:layout_weight="1"
                     android:text="+"
                     android:onClick="sendLockPlus15"
                     />
             </LinearLayout>
             <TextView
-                android:layout_width="match_parent"
+                android:layout_columnWeight="1"
+                android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_gravity="center"
                 android:text="Lock 15min"
                 />
 
             <Button
+                android:layout_columnWeight="1"
                 android:layout_gravity="fill_horizontal"
-                android:text="All Open"
+                android:text="Open all"
                 android:onClick="sendAllUp"
                 />
             <Button
+                android:layout_columnWeight="1"
                 android:layout_gravity="fill_horizontal"
-                android:text="All Close"
+                android:text="Close all"
                 android:onClick="sendAllDown"
                 />
             <Space
+                android:layout_columnWeight="1"
                 />
 
     </GridLayout>
