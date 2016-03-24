@@ -286,6 +286,9 @@ public class MyActivity extends AppCompatActivity {
                             case "STOPPED":
                                 return "Stopped";
 
+                            case "ALTERING":
+                                return "Altering...";
+
                             default:
                                 return state;
                         }
@@ -339,15 +342,6 @@ public class MyActivity extends AppCompatActivity {
                                     boolean busy = shutterJSONObj.getBoolean("busy");
                                     shuttersBusyTextView[s-1].setVisibility(busy ? View.VISIBLE : View.INVISIBLE);
 
-                                    /*
-                                    String heading = shutterJSONObj.getString("heading");
-                                    if (heading.equals(state)) {
-                                        shuttersHeadingTextView[s-1].setText("");
-                                    } else {
-                                        shuttersHeadingTextView[s-1].setText(prettyPrintState(heading));
-                                    }
-                                    */
-
                                     long lockedTimeStamp = shutterJSONObj.getInt("locked");
                                     long lockedPrio = shutterJSONObj.getInt("lockedPrio");
                                     if (lockedTimeStamp > 0) {
@@ -361,6 +355,12 @@ public class MyActivity extends AppCompatActivity {
                                     } else {
                                         shuttersLockedTextView[s-1].setText("");
                                     }
+
+                                    String reason = shutterJSONObj.optString("autoReason");
+                                    if (reason != null)
+                                        reason = "";
+                                    shuttersReasonTextView[s - 1].setText(reason);
+
 
 
 
