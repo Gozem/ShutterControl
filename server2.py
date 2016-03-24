@@ -30,6 +30,8 @@ class WebSocketHandler(tornado.websocket.WebSocketHandler):
 
     def open(self):
         #self.write_message("connected")
+
+        print "Connected client: %r" % self.request.remote_ip
         wsClients.add(self)
 
         data = {'what': "status"}
@@ -127,7 +129,7 @@ class Shutter:
     _cmdDoneAt = getNow()
     _active = False
     _lockedUntil = 0
-    _lockedPrio = 0
+    _lockedPrio = 100
     _wants = []
     _autoReason = ""
 
@@ -135,7 +137,7 @@ class Shutter:
         print "%s %s" % (self._name, msg)
 
     def _runStateChangeCallback(self):
-        self._onStateChangeCallback(self, self._name, self._state, self._heading, self._active, self._lockedUntil)        
+        self._onStateChangeCallback(self, self._name, self._state, self._heading, self._active, self._lockedUntil, self._lockedPrio)
 
     def _setState(self, state):
         self._state = state
@@ -214,17 +216,41 @@ class Shutter:
         self._heading = State.STOPPED
         self._stop()
 
-    def lock(self, timestamp):
-        self._log("Lock timestamp=%d now=%d" % (timestamp,getNow()))
+    def _lockManual(self):
+        offset = 15 * 60
+        minTimestamp = getNow() + offset
+        if self._lockedUntil < minTimestamp:
+            self._lockedUntil = minTimestamp
+        if self._lockedPrio > 10:
+            self._lockedPrio = 10
+
+    def lockAbsolute(self, timestamp, prio):
+        self._log("Lock prio=%d timestamp=%d now=%d" % (prio, timestamp, getNow()))
         self._lockedUntil = timestamp
+        self._lockedPrio = prio
+        self._runStateChangeCallback()
+
+    def lockOffset(self, offset, prio):
+        self._log("Lock prio=%d offset=%d now=%d" % (prio, offset, getNow()))
+        if self._lockedUntil == 0:
+            self._lockedUntil = getNow()
+        self._lockedUntil += offset
+        self._lockedPrio = prio
+        self._runStateChangeCallback()
+
+    def lockUnlock(self):
+        self._log("Lock unlock")
+        self._lockedUntil = 0
         self._runStateChangeCallback()
 
     def manualUp(self):
         self._log("Manual Up")
+        self._lockManual()
         self._up()
 
     def manualDown(self):
         self._log("Manual Down")
+        self._lockManual()
         self._down()
 
     def autoUp(self, prio, reason):
@@ -262,6 +288,7 @@ class Shutter:
         if self._lockedUntil > 0 and getNow() >= self._lockedUntil:
             self._log("Unlocking!")
             self._lockedUntil = 0
+            self._lockedPrio = 100
             self._runStateChangeCallback()
 
         if self._active == False:
@@ -327,7 +354,7 @@ class ShutterServer(threading.Thread):
             for cb in self._observers:
                 cb(self._status.copy())
 
-    def _shutterStateChange(self, shutter, name, state, heading, busy, locked):
+    def _shutterStateChange(self, shutter, name, state, heading, busy, locked, lockedPrio):
         #msg = name + "_" + State.toString(state) + "_" + str(busy)
         #print "Callback: " + msg
 
@@ -335,7 +362,8 @@ class ShutterServer(threading.Thread):
         updated[name] = {'state': State.toString(state),
                          'heading': State.toString(heading),
                          'busy': busy,
-                         'locked': locked}
+                         'locked': locked,
+                         'lockedPrio': lockedPrio}
 
         if updated != self._status:
             self._status = updated            
@@ -407,6 +435,7 @@ class ShutterServer(threading.Thread):
         return self._getRandom(selection)
 
     def _shutterControl(self, msg):
+        # Get main params
         try:
             shuttername = msg['shutter']
             cmd = msg['cmd']
@@ -452,13 +481,32 @@ class ShutterServer(threading.Thread):
 
         elif cmd == "LOCK":
             try:
+                how = msg['how']
+                value = msg['value']
+                prio = msg['prio']
+            except Exception as e:
+                print "ERROR: Missing argument:" + e
+                return
+
+            if how == "ABSOLUTE":
+                func = lambda x: x.lockAbsolute(value, prio)
+            elif how == "OFFSET":
+                func = lambda x: x.lockOffset(value, prio)
+            else:
+                print "ERROR: Unknown how argument:%r" % how
+                return
+
+        elif cmd == "LOCK_OFFSET":
+            try:
                 value = msg['value']
             except Exception as e:
-                print "ERROR"
-                print e
+                print "ERROR: Missing 'value' argument"
                 return
-            
-            func = lambda x: x.lock(value)
+
+            func = lambda x: x.lockOffset(value)
+
+        elif cmd == "UNLOCK":
+            func = lambda x: x.lockUnlock()
 
         else:
             print "Unknown command '%s' from client" % cmd
@@ -481,7 +529,7 @@ class ShutterServer(threading.Thread):
             self._rain = True
             self._status['Rain'] = True
             for s in self._shutters.values():
-                s.autoDown(1, "Raining")
+                s.autoDown(2, "Raining")
         elif cmd == 'NORAIN':
             self._status['Rain'] = False
             self._rain = False
@@ -587,7 +635,7 @@ class ShutterServer(threading.Thread):
         while True:
             self._handleMsg()
             self._process()
- 
+
 if __name__ == "__main__":
 
     tornado.options.parse_command_line()
@@ -598,7 +646,7 @@ if __name__ == "__main__":
 
 
     def raining(shutterServer):
-        wait = 5
+        wait = 60
 
         while True:
             time.sleep(wait)
