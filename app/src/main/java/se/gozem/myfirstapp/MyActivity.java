@@ -41,6 +41,7 @@ import java.util.TimeZone;
 
 import android.content.Intent;
 
+
 public class MyActivity extends AppCompatActivity {
     public final static String EXTRA_MESSAGE = "com.mycompany.myfirstapp.MESSAGE";
 
@@ -52,7 +53,8 @@ public class MyActivity extends AppCompatActivity {
     private TextView temp2TextView;
     private TextView[] shuttersStateTextView;
     private TextView[] shuttersBusyTextView;
-    private TextView[] shuttersHeadingTextView;
+    private TextView[] shuttersReasonTextView;
+    private TextView[] shuttersLockedTextView;
     private NumberPicker locktime;
 
     private ColorStateList defaultTextColor;
@@ -99,13 +101,21 @@ public class MyActivity extends AppCompatActivity {
         shuttersBusyTextView[4] = (TextView)findViewById(R.id.shutter5_busy);
         shuttersBusyTextView[5] = (TextView)findViewById(R.id.shutter6_busy);
 
-        shuttersHeadingTextView = new TextView[6];
-        shuttersHeadingTextView[0] = (TextView)findViewById(R.id.shutter1_reason);
-        shuttersHeadingTextView[1] = (TextView)findViewById(R.id.shutter2_reason);
-        shuttersHeadingTextView[2] = (TextView)findViewById(R.id.shutter3_reason);
-        shuttersHeadingTextView[3] = (TextView)findViewById(R.id.shutter4_reason);
-        shuttersHeadingTextView[4] = (TextView)findViewById(R.id.shutter5_reason);
-        shuttersHeadingTextView[5] = (TextView)findViewById(R.id.shutter6_reason);
+        shuttersReasonTextView = new TextView[6];
+        shuttersReasonTextView[0] = (TextView)findViewById(R.id.shutter1_reason);
+        shuttersReasonTextView[1] = (TextView)findViewById(R.id.shutter2_reason);
+        shuttersReasonTextView[2] = (TextView)findViewById(R.id.shutter3_reason);
+        shuttersReasonTextView[3] = (TextView)findViewById(R.id.shutter4_reason);
+        shuttersReasonTextView[4] = (TextView)findViewById(R.id.shutter5_reason);
+        shuttersReasonTextView[5] = (TextView)findViewById(R.id.shutter6_reason);
+
+        shuttersLockedTextView = new TextView[6];
+        shuttersLockedTextView[0] = (TextView)findViewById(R.id.shutter1_locked);
+        shuttersLockedTextView[1] = (TextView)findViewById(R.id.shutter2_locked);
+        shuttersLockedTextView[2] = (TextView)findViewById(R.id.shutter3_locked);
+        shuttersLockedTextView[3] = (TextView)findViewById(R.id.shutter4_locked);
+        shuttersLockedTextView[4] = (TextView)findViewById(R.id.shutter5_locked);
+        shuttersLockedTextView[5] = (TextView)findViewById(R.id.shutter6_locked);
 
         sharedPref = getSharedPreferences("se.gozem.myfirstapp.PREFERENCE_FILE_KEY", MODE_PRIVATE);
 
@@ -166,9 +176,9 @@ public class MyActivity extends AppCompatActivity {
                         Log.i("LockTime", "Locktime selected: " + locktimePicker.getValue());
 
                         if (mCurrentMinLocktime == 0) {
-                            lockShutter("ALL", 0);
+                            lockShutterUnlock("ALL");
                         } else {
-                            lockShutter("ALL", (System.currentTimeMillis() / 1000) + (mCurrentMinLocktime * 60)); //Convert to seconds
+                            lockShutter("ALL", "ABSOLUTE", 60 * mCurrentMinLocktime, 0); //Convert to seconds
                         }
                     }
                 })
@@ -230,7 +240,8 @@ public class MyActivity extends AppCompatActivity {
                         for (int i = 0; i < 6; i++) {
                             shuttersStateTextView[i].setText("Unknown");
                             shuttersBusyTextView[i].setVisibility(View.INVISIBLE);
-                            shuttersHeadingTextView[i].setText("");
+                            shuttersReasonTextView[i].setText("");
+                            shuttersLockedTextView[i].setText("");
                         }
                     }
                 });
@@ -338,16 +349,17 @@ public class MyActivity extends AppCompatActivity {
                                     */
 
                                     long lockedTimeStamp = shutterJSONObj.getInt("locked");
+                                    long lockedPrio = shutterJSONObj.getInt("lockedPrio");
                                     if (lockedTimeStamp > 0) {
                                         Date date = new Date(lockedTimeStamp * 1000);
 
                                         DateFormat df = new SimpleDateFormat("HH:mm");
                                         df.setTimeZone(TimeZone.getDefault());
-                                        String locked = df.format(date);
+                                        String locked = df.format(date) + " (" + lockedPrio + ")";
                                         Log.i("Locked", locked);
-                                        shuttersHeadingTextView[s-1].setText(locked);
+                                        shuttersLockedTextView[s-1].setText(locked);
                                     } else {
-                                        shuttersHeadingTextView[s-1].setText("");
+                                        shuttersLockedTextView[s-1].setText("");
                                     }
 
 
@@ -423,21 +435,6 @@ public class MyActivity extends AppCompatActivity {
     }
     */
 
-
-    private void lockShutter(String shutter, long timestamp) {
-        JSONObject json = new JSONObject();
-        try {
-            json.put("what", "shutter");
-            json.put("shutter", shutter);
-            json.put("cmd", "LOCK");
-            json.put("value", timestamp);
-        } catch (JSONException e) {
-            e.printStackTrace();
-        }
-
-        sendToServer(json.toString());
-    }
-
     private void commandShutter(String shutter, String cmd) {
         JSONObject json = new JSONObject();
         try {
@@ -445,12 +442,31 @@ public class MyActivity extends AppCompatActivity {
             json.put("shutter", shutter);
             json.put("cmd", cmd);
         } catch (JSONException e) {
-            e.printStackTrace();
+            throw new RuntimeException(e);
         }
 
         sendToServer(json.toString());
     }
 
+    private void lockShutter(String shutter, String how, long value, int prio) {
+        JSONObject json = new JSONObject();
+        try {
+            json.put("what", "shutter");
+            json.put("shutter", shutter);
+            json.put("cmd", "LOCK");
+            json.put("how", how);
+            json.put("value", value);
+            json.put("prio", prio);
+        } catch (JSONException e) {
+            throw new RuntimeException(e);
+        }
+
+        sendToServer(json.toString());
+    }
+
+    private void lockShutterUnlock(String shutter) {
+        commandShutter(shutter, "UNLOCK");
+    }
 
     private void sendToServer(String msg) {
         if (mWebSocketClient.getReadyState() == WebSocket.READYSTATE.OPEN)
@@ -464,7 +480,7 @@ public class MyActivity extends AppCompatActivity {
     public void sendAnyDown(View view) {
         commandShutter("ANY", "DOWN");
     }
-    
+
     public void sendAllUp(View view) {
         commandShutter("ALL", "UP");
     }
@@ -478,10 +494,10 @@ public class MyActivity extends AppCompatActivity {
     }
 
     public void sendLockPlus15(View view) {
-        lockShutter("ALL", (System.currentTimeMillis() / 1000) + 15 * 60); //Convert to seconds
+        lockShutter("ALL", "OFFSET", 15 * 60, 5);
     }
 
     public void sendLockMinus15(View view) {
-
+        lockShutter("ALL", "OFFSET", -15 * 60, 5);
     }
 }
