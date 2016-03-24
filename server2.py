@@ -136,8 +136,13 @@ class Shutter:
     def _log(self, msg):
         print "%s %s" % (self._name, msg)
 
-    def _runStateChangeCallback(self):
-        self._onStateChangeCallback(self, self._name, self._state, self._heading, self._active, self._lockedUntil, self._lockedPrio)
+    def getStatus(self):
+        return {'state': State.toString(self._state),
+                'heading': State.toString(self._heading),
+                'busy': self._active,
+                'locked': self._lockedUntil,
+                'lockedPrio': self._lockedPrio,
+                'autoReason': self._autoReason}
 
     def _setState(self, state):
         self._state = state
@@ -149,14 +154,12 @@ class Shutter:
         # Run up or down for 30 seconds
         self._cmdDoneAt = getNow() + 7
         self._active = True
-        self._runStateChangeCallback()
 
     def _pause(self):
         # Wait 2 seconds before we accept next command so motor doesn't
         # alter direction too fast
         self._cmdDoneAt = getNow() + 2
         self._active = True
-        self._runStateChangeCallback()
 
     def _runDown(self):
         self._log("Going down")
@@ -200,11 +203,10 @@ class Shutter:
         self._pause()
 
 
-    def __init__(self, name, downPin, upPin, onStateChangeCallback):
+    def __init__(self, name, downPin, upPin):
         self._name = name
         self._downPin = downPin
         self._upPin = upPin
-        self._onStateChangeCallback = onStateChangeCallback
 
         #Init state, stop, and then down
         #SO if script restarts, we will have a small starting stop pause
@@ -228,7 +230,6 @@ class Shutter:
         self._log("Lock prio=%d timestamp=%d now=%d" % (prio, timestamp, getNow()))
         self._lockedUntil = timestamp
         self._lockedPrio = prio
-        self._runStateChangeCallback()
 
     def lockOffset(self, offset, prio):
         self._log("Lock prio=%d offset=%d now=%d" % (prio, offset, getNow()))
@@ -236,12 +237,10 @@ class Shutter:
             self._lockedUntil = getNow()
         self._lockedUntil += offset
         self._lockedPrio = prio
-        self._runStateChangeCallback()
 
     def lockUnlock(self):
         self._log("Lock unlock")
         self._lockedUntil = 0
-        self._runStateChangeCallback()
 
     def manualUp(self):
         self._log("Manual Up")
@@ -289,7 +288,6 @@ class Shutter:
             self._log("Unlocking!")
             self._lockedUntil = 0
             self._lockedPrio = 100
-            self._runStateChangeCallback()
 
         if self._active == False:
             return
@@ -323,8 +321,7 @@ class Shutter:
                     self._runDown()
             
             else:
-                # Nothing more todo, we are inactive and waiting for next cmd
-                self._runStateChangeCallback()
+                pass # Nothing more, we are inactive and waiting for next cmd
 
 class ShutterServer(threading.Thread):
     _cmdQ = Queue.Queue()
@@ -333,6 +330,7 @@ class ShutterServer(threading.Thread):
     _observers_lock = threading.Lock()
 
     _status = {}
+    _lastStatus = {}
 
     _rain = False
 
@@ -348,53 +346,43 @@ class ShutterServer(threading.Thread):
         with self._observers_lock:
             self._observers.add(callback)
 
-    def _announceStatus(self):
-        #print "Announce: " + str(self._status)
-        with self._observers_lock:
-            for cb in self._observers:
-                cb(self._status.copy())
+    def _announceStatus(self, force = False):
+        for (name, shutter) in self._shutters.iteritems():
+            self._status[name] = shutter.getStatus()
 
-    def _shutterStateChange(self, shutter, name, state, heading, busy, locked, lockedPrio):
-        #msg = name + "_" + State.toString(state) + "_" + str(busy)
-        #print "Callback: " + msg
-
-        updated = self._status.copy()
-        updated[name] = {'state': State.toString(state),
-                         'heading': State.toString(heading),
-                         'busy': busy,
-                         'locked': locked,
-                         'lockedPrio': lockedPrio}
-
-        if updated != self._status:
-            self._status = updated            
-            self._announceStatus()
+        if force or self._status != self._lastStatus:
+            print "Announce: " + str(self._status)
+            with self._observers_lock:
+                for cb in self._observers:
+                    cb(self._status.copy()) # Give each observer a copy, if they edit it
+            self._lastStatus = self._status.copy()
 
     def __init__(self):
         threading.Thread.__init__(self)
 
         _p11 = Pin("GPIO11", 11)
         _p12 = Pin("GPIO12", 12)
-        _shutter1 = Shutter("Shutter1", _p11, _p12, self._shutterStateChange)
+        _shutter1 = Shutter("Shutter1", _p11, _p12)
 
         _p21 = Pin("GPIO21", 21)
         _p22 = Pin("GPIO22", 22)
-        _shutter2 = Shutter("Shutter2", _p21, _p22, self._shutterStateChange)
+        _shutter2 = Shutter("Shutter2", _p21, _p22)
 
         _p31 = Pin("GPIO31", 31)
         _p32 = Pin("GPIO32", 32)
-        _shutter3 = Shutter("Shutter3", _p31, _p32, self._shutterStateChange)
+        _shutter3 = Shutter("Shutter3", _p31, _p32)
 
         _p41 = Pin("GPIO41", 41)
         _p42 = Pin("GPIO42", 42)
-        _shutter4 = Shutter("Shutter4", _p41, _p42, self._shutterStateChange)
+        _shutter4 = Shutter("Shutter4", _p41, _p42)
 
         _p51 = Pin("GPIO51", 51)
         _p52 = Pin("GPIO52", 52)
-        _shutter5 = Shutter("Shutter5", _p51, _p52, self._shutterStateChange)
+        _shutter5 = Shutter("Shutter5", _p51, _p52)
 
         _p61 = Pin("GPIO61", 61)
         _p62 = Pin("GPIO62", 62)
-        _shutter6 = Shutter("Shutter6", _p61, _p62, self._shutterStateChange)
+        _shutter6 = Shutter("Shutter6", _p61, _p62)
 
         self._shutters = {'Shutter1': _shutter1,
                           'Shutter2': _shutter2,
@@ -548,13 +536,8 @@ class ShutterServer(threading.Thread):
             return        
 
         self._tempSensors[tempname] = value
+        self._status[tempname] = value
 
-        updated = self._status.copy()
-        updated[tempname] = value
-
-        if updated != self._status:
-            self._status = updated            
-            self._announceStatus()
 
     def _getAvgTemp(self):
         sum = 0
@@ -621,7 +604,7 @@ class ShutterServer(threading.Thread):
             elif msg['what'] == 'rain':
                 self._rainUpdate(msg)
             elif msg['what'] == 'status':
-                self._announceStatus()
+                self._announceStatus(force = True)
             else:
                 print "ERROR: Unknown msg['what']: %s" % msg['what']
 
@@ -635,6 +618,7 @@ class ShutterServer(threading.Thread):
         while True:
             self._handleMsg()
             self._process()
+            self._announceStatus()
 
 if __name__ == "__main__":
 
